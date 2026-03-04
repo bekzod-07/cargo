@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
     TextField, Button, Stack, Typography,
     Paper, Box, Divider
-} from '@mui/material'; // InputAdornment olib tashlandi
+} from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import MapIcon from '@mui/icons-material/Map';
 import MyLocationIcon from '@mui/icons-material/MyLocation';
 
-const AddressForm = () => {
-    // address o'zgaruvchisini endi inputlarga ulaymiz (value)
+// DIQQAT: onConfirm propsini qabul qilib olamiz
+const AddressForm = ({ onConfirm }) => {
     const [address, setAddress] = useState({
         neighborhood: '',
         street: '',
@@ -25,15 +25,26 @@ const AddressForm = () => {
             navigator.geolocation.getCurrentPosition((position) => {
                 const { latitude, longitude } = position.coords;
                 console.log(`Koordinatalar: ${latitude}, ${longitude}`);
+                // Kelajakda bu koordinatalarni ham saqlashingiz mumkin
                 alert("Location qabul qilindi!");
             });
         }
     };
 
     const handleSubmit = () => {
-        // Endi 'address' bu yerda ishlatilyapti, ogohlantirish yo'qoladi
-        console.log("Jo'natilayotgan manzil:", address);
-        alert(`Manzil saqlandi: ${address.neighborhood}, ${address.street}, ${address.number}`);
+        // 1. Oddiy tekshiruv (Validation)
+        if (!address.neighborhood || !address.street || !address.number) {
+            alert("Iltimos, manzilni to'liq to'ldiring!");
+            return;
+        }
+
+        // 2. Ma'lumotni konsolga chiqaramiz
+        console.log("Tasdiqlangan manzil:", address);
+
+        // 3. ENGM MUHIM QISM: App.jsx dagi keyingi bosqichga o'tish funksiyasini chaqiramiz
+        if (onConfirm) {
+            onConfirm();
+        }
     };
 
     return (
@@ -52,8 +63,9 @@ const AddressForm = () => {
                     fullWidth
                     label="Mahalla nomi"
                     name="neighborhood"
-                    value={address.neighborhood} // Statega bog'landi
+                    value={address.neighborhood}
                     onChange={handleManualInput}
+                    placeholder="Masalan: Fevzi Çakmak Mah."
                 />
 
                 <Stack direction="row" spacing={2}>
@@ -61,15 +73,17 @@ const AddressForm = () => {
                         fullWidth
                         label="Ko'cha/Sokak"
                         name="street"
-                        value={address.street} // Statega bog'landi
+                        value={address.street}
                         onChange={handleManualInput}
+                        placeholder="10420 Sokak"
                     />
                     <TextField
                         sx={{ width: '120px' }}
                         label="Uy No"
                         name="number"
-                        value={address.number} // Statega bog'landi
+                        value={address.number}
                         onChange={handleManualInput}
+                        placeholder="No:1"
                     />
                 </Stack>
 
@@ -80,9 +94,9 @@ const AddressForm = () => {
                     color="secondary"
                     startIcon={<MyLocationIcon />}
                     onClick={shareLocation}
-                    sx={{ py: 1.5, borderRadius: '10px', textTransform: 'none' }}
+                    sx={{ py: 1.5, borderRadius: '10px', textTransform: 'none', fontWeight: 'bold' }}
                 >
-                    GPS orqali yuborish
+                    📍 Hozirgi joylashuvni yuborish
                 </Button>
 
                 <Button
@@ -97,8 +111,8 @@ const AddressForm = () => {
                     variant="contained"
                     color="primary"
                     size="large"
-                    onClick={handleSubmit} // State ishlatiladigan joy
-                    sx={{ mt: 2, py: 2, borderRadius: '12px' }}
+                    onClick={handleSubmit}
+                    sx={{ mt: 2, py: 2, borderRadius: '12px', fontSize: '1.1rem', fontWeight: 'bold' }}
                 >
                     Manzilni tasdiqlash
                 </Button>
