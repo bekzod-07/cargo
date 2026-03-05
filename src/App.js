@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import { CssBaseline, Container, Typography, Box, Fade, Button } from '@mui/material';
+import { CssBaseline, Container, Typography, Box, Fade, Button, Paper } from '@mui/material';
 import { theme } from './theme/theme';
 
 // Komponentlarni import qilish
@@ -15,9 +15,10 @@ function App() {
     // 2. Qaysi formani ko'rsatish holati ('address' yoki 'wizard')
     const [currentView, setCurrentView] = useState('address');
 
-    // Sahifa yuklanganda hududni tekshirish
+    // Sahifa yuklanganda sessionStorage'ni tekshirish
     useEffect(() => {
-        const savedRegion = localStorage.getItem('user_region');
+        // localStorage o'rniga sessionStorage ishlatamiz (vkladka yopilsa o'chadi)
+        const savedRegion = sessionStorage.getItem('user_region_session');
         if (savedRegion) {
             setSelectedRegion(savedRegion);
         }
@@ -26,6 +27,8 @@ function App() {
     // Hudud tanlanganda ishlaydigan funksiya
     const handleRegionSelect = (region) => {
         setSelectedRegion(region);
+        // sessionStorage'ga saqlash
+        sessionStorage.setItem('user_region_session', region);
     };
 
     // Manzil tasdiqlanganda Wizardga o'tish funksiyasi
@@ -37,55 +40,94 @@ function App() {
         <ThemeProvider theme={theme}>
             <CssBaseline />
 
-            {/* 1-QADAM: HUDUD TANLASH MODALI */}
-            {!selectedRegion && (
-                <RegionModal onSelect={handleRegionSelect} />
-            )}
+            {/* Asosiy fon gradienti */}
+            <Box sx={{
+                minHeight: '100vh',
+                background: 'radial-gradient(circle at top right, #f8f9fa 0%, #e9ecef 100%)',
+                py: 4
+            }}>
 
-            <Container maxWidth="md" sx={{ mt: 4, mb: 5 }}>
-                {/* LOGO VA SARLAVHA */}
-                <Box sx={{ textAlign: 'center', mb: 4 }}>
-                    <Typography variant="h3" color="primary" fontWeight="800" gutterBottom>
-                        NURI CARGO
-                    </Typography>
+                {/* 1-QADAM: HUDUD TANLASH MODALI */}
+                {!selectedRegion && (
+                    <RegionModal onSelect={handleRegionSelect} />
+                )}
 
-                    {selectedRegion && (
-                        <Typography variant="subtitle1" sx={{ bgcolor: 'primary.light', color: 'white', display: 'inline-block', px: 2, py: 0.5, borderRadius: 2 }}>
-                            Hudud: <b>{selectedRegion.toUpperCase()}</b>
+                <Container maxWidth="md">
+                    {/* LOGO VA SARLAVHA */}
+                    <Box sx={{ textAlign: 'center', mb: 6 }}>
+                        <Typography
+                            variant="h2"
+                            sx={{
+                                fontWeight: 900,
+                                background: 'linear-gradient(45deg, #1a237e 30%, #0d47a1 90%)',
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                mb: 1
+                            }}
+                        >
+                            NURI CARGO
                         </Typography>
+
+                        {selectedRegion && (
+                            <Fade in={true}>
+                                <Paper
+                                    elevation={0}
+                                    sx={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        px: 3, py: 1,
+                                        borderRadius: '50px',
+                                        bgcolor: 'white',
+                                        border: '1px solid rgba(0,0,0,0.05)',
+                                        boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
+                                    }}
+                                >
+                                    <Box sx={{ width: 10, height: 10, bgcolor: 'success.main', borderRadius: '50%', mr: 1.5 }} />
+                                    <Typography variant="subtitle1" fontWeight="700" color="text.primary">
+                                        Hudud: {selectedRegion.toUpperCase()}
+                                    </Typography>
+                                </Paper>
+                            </Fade>
+                        )}
+                    </Box>
+
+                    {/* 2-QADAM: MANZIL KIRITISH */}
+                    {selectedRegion && currentView === 'address' && (
+                        <Fade in={true} timeout={800}>
+                            <Box>
+                                <Typography variant="h5" align="center" sx={{ mb: 4, fontWeight: 800, color: '#374151' }}>
+                                    📍 Olib ketish manzilini aniqlang
+                                </Typography>
+                                <AddressForm onConfirm={handleAddressConfirm} />
+                            </Box>
+                        </Fade>
                     )}
-                </Box>
 
-                {/* 2-QADAM: MANZIL KIRITISH (faqat hudud tanlangan bo'lsa) */}
-                {selectedRegion && currentView === 'address' && (
-                    <Fade in={true} timeout={800}>
-                        <Box>
-                            <Typography variant="h5" align="center" sx={{ mb: 3, fontWeight: 600 }}>
-                                Olib ketish manzilini aniqlang
-                            </Typography>
-                            <AddressForm onConfirm={handleAddressConfirm} />
-                        </Box>
-                    </Fade>
-                )}
+                    {/* 3-QADAM: KARGO WIZARD */}
+                    {selectedRegion && currentView === 'wizard' && (
+                        <Fade in={true} timeout={800}>
+                            <Box sx={{ mt: -2 }}>
+                                <CargoWizard region={selectedRegion} />
 
-                {/* 3-QADAM: KARGO WIZARD (Manzil tasdiqlangandan keyin) */}
-                {selectedRegion && currentView === 'wizard' && (
-                    <Fade in={true} timeout={800}>
-                        <Box>
-                            <CargoWizard region={selectedRegion} />
-
-                            {/* Orqaga qaytish imkoniyati (ixtiyoriy) */}
-                            <Button
-                                onClick={() => setCurrentView('address')}
-                                sx={{ mt: 2, textTransform: 'none' }}
-                                color="inherit"
-                            >
-                                ← Manzilni o'zgartirish
-                            </Button>
-                        </Box>
-                    </Fade>
-                )}
-            </Container>
+                                <Box sx={{ textAlign: 'center', mt: 3 }}>
+                                    <Button
+                                        onClick={() => setCurrentView('address')}
+                                        variant="text"
+                                        sx={{
+                                            textTransform: 'none',
+                                            color: 'text.secondary',
+                                            fontWeight: 600,
+                                            '&:hover': { bgcolor: 'transparent', color: 'primary.main' }
+                                        }}
+                                    >
+                                        ← Manzilni qaytadan tahrirlash
+                                    </Button>
+                                </Box>
+                            </Box>
+                        </Fade>
+                    )}
+                </Container>
+            </Box>
         </ThemeProvider>
     );
 }

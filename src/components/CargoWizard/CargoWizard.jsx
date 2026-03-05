@@ -1,22 +1,36 @@
 import React, { useState } from 'react';
 import {
     Box, Stepper, Step, StepLabel, Button, Typography,
-    TextField, Stack, Paper, Divider, Alert
-} from '@mui/material'; // IconButton bu yerdan olib tashlandi
+    TextField, Stack, Paper, Divider, Alert, Slider,
+    InputAdornment, Zoom, Fade, CircularProgress
+} from '@mui/material';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Ikonkalar
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import MyLocationIcon from '@mui/icons-material/MyLocation';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CancelIcon from '@mui/icons-material/Cancel';
+import ScaleIcon from '@mui/icons-material/Scale';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
-const steps = ['Og‘irlik', 'Qabul qiluvchi', 'Xavfsizlik', 'Kvitansiya', 'To‘lov'];
+// Leaflet Marker fix
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({ iconUrl: markerIcon, shadowUrl: markerShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
+L.Marker.prototype.options.icon = DefaultIcon;
+
+const steps = ['Yuk', 'Qabul qiluvchi', 'Xavfsizlik', 'To‘lov'];
 
 export default function CargoWizard({ region }) {
     const [activeStep, setActiveStep] = useState(0);
+    const [loadingMap, setLoadingMap] = useState(false);
     const [formData, setFormData] = useState({
         weight: 10,
-        location: null,
+        coords: null,
         receiverFIO: '',
-        receiverPhone: '+998',
+        receiverPhone: '+998 ',
         passportImg: null,
         isSafe: null,
         itemsImg: null,
@@ -27,161 +41,234 @@ export default function CargoWizard({ region }) {
     const nextStep = () => setActiveStep((prev) => prev + 1);
     const prevStep = () => setActiveStep((prev) => prev - 1);
 
-    // 9-qadam mantiqi: Formula (kg * 8$) + 400 TL
     const priceUSD = formData.weight * 8;
     const serviceFeeTL = 400;
 
+    // Telefon raqamni formatlash (Pro Filter)
+    const formatPhoneNumber = (value) => {
+        if (!value) return '+998 ';
+        const phoneNumber = value.replace(/[^\d]/g, '');
+        if (!phoneNumber.startsWith('998')) return '+998 ';
+
+        const part1 = phoneNumber.slice(0, 3); // 998
+        const part2 = phoneNumber.slice(3, 5); // 90
+        const part3 = phoneNumber.slice(5, 8); // 123
+        const part4 = phoneNumber.slice(8, 10); // 45
+        const part5 = phoneNumber.slice(10, 12); // 67
+
+        let result = `+${part1} `;
+        if (part2) result += `(${part2}) `;
+        if (part3) result += `${part3}-`;
+        if (part4) result += `${part4}-`;
+        if (part5) result += `${part5}`;
+
+        return result;
+    };
+
+    // Xarita komponenti
+    function MapPicker() {
+        useMapEvents({
+            click(e) { setFormData({ ...formData, coords: [e.latlng.lat, e.latlng.lng] }); },
+        });
+        return formData.coords ? <Marker position={formData.coords} /> : null;
+    }
+
+    const getGPS = () => {
+        setLoadingMap(true);
+        navigator.geolocation.getCurrentPosition(
+            (p) => {
+                setFormData({ ...formData, coords: [p.coords.latitude, p.coords.longitude] });
+                setLoadingMap(false);
+            },
+            () => { setLoadingMap(false); alert("GPS aniqlanmadi, xaritadan tanlang."); }
+        );
+    };
+
     const renderStep = () => {
         switch (activeStep) {
-            case 0: // 4-qadam: Og'irlik va Location
+            case 0: // 1-Qadam: Og'irlik va Xarita
                 return (
-                    <Stack spacing={3}>
-                        <Typography variant="h6" fontWeight="600">Yuk og'irligini kiriting</Typography>
-                        <TextField
-                            label="Og'irlik (kg)" type="number" fullWidth
-                            value={formData.weight}
-                            onChange={(e) => setFormData({...formData, weight: parseInt(e.target.value) || 0})}
-                            error={formData.weight < 10}
-                            helperText={formData.weight < 10 ? "Minimal 10 kg bo'lishi shart" : "Kargo uchun minimal limit 10 kg"}
-                        />
-                        <Button
-                            variant="outlined" startIcon={<MyLocationIcon />}
-                            color={formData.location ? "success" : "primary"}
-                            onClick={() => {
-                                navigator.geolocation.getCurrentPosition(p => {
-                                    setFormData({...formData, location: p.coords});
-                                    alert("GPS koordinatalar saqlandi!");
-                                });
-                            }}
-                            sx={{ borderRadius: '10px', py: 1.5 }}
-                        >
-                            {formData.location ? "📍 Lokatsiya yuborildi" : "📍 Lokatsiya yuborish (Majburiy)"}
-                        </Button>
-                        <Button
-                            variant="contained"
-                            disabled={formData.weight < 10 || !formData.location}
-                            onClick={nextStep}
-                            sx={{ py: 1.5, borderRadius: '10px' }}
-                        >
-                            Davom etish
-                        </Button>
-                    </Stack>
+                    <Fade in timeout={500}>
+                        <Stack spacing={4}>
+                            <Box sx={{ textAlign: 'center' }}>
+                                <ScaleIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+                                <Typography variant="h5" fontWeight="800">Yuk og'irligi</Typography>
+                            </Box>
+
+                            <Box sx={{ px: 2 }}>
+                                <Typography gutterBottom fontWeight="600">Og'irlik: {formData.weight} kg</Typography>
+                                <Slider
+                                    value={formData.weight} min={10} max={200}
+                                    onChange={(e, val) => setFormData({ ...formData, weight: val })}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField
+                                    fullWidth label="Aniq vazn" type="number"
+                                    value={formData.weight}
+                                    onChange={(e) => setFormData({ ...formData, weight: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    InputProps={{ endAdornment: <InputAdornment position="end">kg</InputAdornment> }}
+                                    error={formData.weight < 10}
+                                    helperText={formData.weight < 10 && "Minimal 10 kg bo'lishi shart"}
+                                />
+                            </Box>
+
+                            <Divider>LOKATSIYA (MAJBURIY)</Divider>
+
+                            <Box sx={{ height: 250, borderRadius: '20px', overflow: 'hidden', border: '1px solid #eee' }}>
+                                <MapContainer center={[37.8713, 32.4846]} zoom={13} style={{ height: '100%' }}>
+                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                    <MapPicker />
+                                </MapContainer>
+                            </Box>
+
+                            <Button
+                                fullWidth variant="outlined" startIcon={loadingMap ? <CircularProgress size={20} /> : <MyLocationIcon />}
+                                onClick={getGPS} sx={{ borderRadius: '15px', py: 1.5 }}
+                            >
+                                {formData.coords ? "📍 Nuqta belgilandi" : "Hozirgi joyimni aniqlash"}
+                            </Button>
+
+                            <Button
+                                fullWidth variant="contained" disabled={formData.weight < 10 || !formData.coords}
+                                onClick={nextStep} sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
+                            >
+                                Davom etish
+                            </Button>
+                        </Stack>
+                    </Fade>
                 );
 
-            case 1: // 5-qadam: Qabul qiluvchi
+            case 1: // 2-Qadam: Qabul qiluvchi (Siz so'ragan Pro telefon filtr)
                 return (
-                    <Stack spacing={2}>
-                        <Typography variant="h6" fontWeight="600">O'zbekistondagi qabul qiluvchi</Typography>
-                        <TextField label="F.I.O" fullWidth onChange={(e) => setFormData({...formData, receiverFIO: e.target.value})} />
-                        <TextField label="Telefon" fullWidth value={formData.receiverPhone} onChange={(e) => setFormData({...formData, receiverPhone: e.target.value})} />
-                        <Button variant="contained" component="label" startIcon={<CloudUploadIcon />} color="secondary">
-                            Pasport rasmini yuklash
-                            <input type="file" hidden accept="image/*" onChange={(e) => setFormData({...formData, passportImg: e.target.files[0]})} />
-                        </Button>
-                        {formData.passportImg && <Alert severity="info">Rasm: {formData.passportImg.name}</Alert>}
-                        <Button variant="contained" onClick={nextStep} disabled={!formData.receiverFIO || !formData.passportImg}>Davom etish</Button>
-                    </Stack>
+                    <Fade in timeout={500}>
+                        <Stack spacing={3}>
+                            <Typography variant="h6" fontWeight="800" textAlign="center">Qabul qiluvchi ma'lumotlari</Typography>
+
+                            <TextField
+                                fullWidth label="F.I.O (To'liq)"
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
+                                onChange={(e) => setFormData({ ...formData, receiverFIO: e.target.value })}
+                            />
+
+                            <TextField
+                                fullWidth label="O'zbekiston telefon raqami"
+                                value={formData.receiverPhone}
+                                placeholder="+998 (90) 123-45-67"
+                                InputProps={{
+                                    startAdornment: <InputAdornment position="start">🇺🇿</InputAdornment>,
+                                }}
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
+                                onChange={(e) => setFormData({ ...formData, receiverPhone: formatPhoneNumber(e.target.value) })}
+                            />
+
+                            <Paper variant="outlined" sx={{ p: 3, borderStyle: 'dashed', borderRadius: '15px', textAlign: 'center', bgcolor: '#fafafa' }}>
+                                <Button component="label" startIcon={<CloudUploadIcon />} sx={{ textTransform: 'none', fontWeight: 'bold' }}>
+                                    {formData.passportImg ? "✅ Pasport yuklandi" : "Pasport rasmini yuklash"}
+                                    <input type="file" hidden accept="image/*" onChange={(e) => setFormData({ ...formData, passportImg: e.target.files[0] })} />
+                                </Button>
+                                {formData.passportImg && <Typography variant="caption" display="block">{formData.passportImg.name}</Typography>}
+                            </Paper>
+
+                            <Button
+                                fullWidth variant="contained" onClick={nextStep}
+                                disabled={!formData.receiverFIO || formData.receiverPhone.length < 19 || !formData.passportImg}
+                                sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
+                            >
+                                Davom etish
+                            </Button>
+                        </Stack>
+                    </Fade>
                 );
 
-            case 2: // 6, 7, 8-qadamlar: Xavfsizlik
+            case 2: // 3-Qadam: Xavfsizlik
                 return (
-                    <Stack spacing={3}>
-                        <Typography variant="h6" fontWeight="600">Xavfsizlik va Ma'lumotlar</Typography>
-                        <Typography variant="body2" color="text.secondary">Taqiqlangan buyum yo'qligiga ishonchingiz komilmi?</Typography>
-                        <Stack direction="row" spacing={2}>
+                    <Fade in timeout={500}>
+                        <Stack spacing={3}>
+                            <Typography variant="h6" fontWeight="800" textAlign="center">Xavfsizlik tekshiruvi</Typography>
+                            <Alert severity="warning" sx={{ borderRadius: '15px' }}>
+                                Suyuqlik, kukun va batareyalar taqiqlanadi!
+                            </Alert>
                             <Button
                                 variant={formData.isSafe ? "contained" : "outlined"}
-                                color="success" fullWidth onClick={() => setFormData({...formData, isSafe: true})}
-                                startIcon={<CheckCircleIcon />}
-                            > Ha </Button>
+                                color="success" fullWidth onClick={() => setFormData({ ...formData, isSafe: true })}
+                                sx={{ borderRadius: '15px', py: 1.5 }}
+                            > Tasdiqlayman </Button>
+
+                            <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed', borderRadius: '15px', textAlign: 'center' }}>
+                                <Button component="label" startIcon={<CloudUploadIcon />}>
+                                    {formData.itemsImg ? "✅ Ro'yxat yuklandi" : "Yuklar ro'yxati (Rasm)"}
+                                    <input type="file" hidden accept="image/*" onChange={(e) => setFormData({ ...formData, itemsImg: e.target.files[0] })} />
+                                </Button>
+                            </Paper>
+
+                            <TextField
+                                fullWidth label="Telegram yoki Tel" placeholder="@username"
+                                onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
+                            />
+
                             <Button
-                                variant="outlined" color="error" fullWidth
-                                onClick={() => alert("Taqiqlangan buyum bilan buyurtma qabul qilinmaydi!")}
-                                startIcon={<CancelIcon />}
-                            > Yo'q </Button>
+                                fullWidth variant="contained" onClick={nextStep}
+                                disabled={!formData.isSafe || !formData.itemsImg || !formData.contact}
+                                sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
+                            > Hisob-faktura </Button>
                         </Stack>
-
-                        <Divider />
-                        <Typography variant="body2">Yuk ichidagi mahsulotlar ro'yxati (Rasm):</Typography>
-                        <Button variant="outlined" component="label" startIcon={<CloudUploadIcon />}>
-                            Ro'yxatni yuklash
-                            <input type="file" hidden accept="image/*" onChange={(e) => setFormData({...formData, itemsImg: e.target.files[0]})} />
-                        </Button>
-
-                        <TextField label="Telegram username yoki Tel" fullWidth onChange={(e) => setFormData({...formData, contact: e.target.value})} />
-
-                        <Button variant="contained" onClick={nextStep} disabled={!formData.isSafe || !formData.itemsImg || !formData.contact}>Tasdiqlash</Button>
-                    </Stack>
+                    </Fade>
                 );
 
-            case 3: // 9-qadam: Kvitansiya
+            case 3: // 4-Qadam: Invoys
                 return (
-                    <Paper elevation={0} sx={{ p: 3, border: '2px dashed #1a237e', borderRadius: 4, bgcolor: '#f0f4ff' }}>
-                        <Typography variant="h5" textAlign="center" fontWeight="800" gutterBottom>📄 BUYURTMA</Typography>
-                        <Divider sx={{ mb: 2 }} />
-                        <Stack spacing={1.5}>
-                            <Typography><b>Hudud:</b> {region}</Typography>
-                            <Typography><b>Og'irlik:</b> {formData.weight} kg</Typography>
-                            <Typography variant="h5" color="primary" sx={{ mt: 2, fontWeight: '700' }}>
-                                Jami: {priceUSD}$ + {serviceFeeTL} TL
-                            </Typography>
-                        </Stack>
-                        <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
-                            <Button fullWidth variant="contained" color="success" onClick={() => { setFormData({...formData, paymentMethod: 'cash'}); nextStep(); }}>💵 Naqd</Button>
-                            <Button fullWidth variant="contained" color="primary" onClick={() => { setFormData({...formData, paymentMethod: 'card'}); nextStep(); }}>💳 Karta</Button>
-                        </Stack>
-                    </Paper>
-                );
+                    <Fade in timeout={500}>
+                        <Stack spacing={3}>
+                            <Paper sx={{ p: 3, borderRadius: '25px', background: 'linear-gradient(135deg, #f0f4ff 0%, #d9e2ff 100%)' }}>
+                                <Stack alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                                    <ReceiptLongIcon color="primary" />
+                                    <Typography variant="h6" fontWeight="900">NURI CARGO INVOICE</Typography>
+                                </Stack>
+                                <Divider sx={{ my: 1.5 }} />
+                                <Box display="flex" justifyContent="space-between"><Typography>Vazn:</Typography><Typography fontWeight="700">{formData.weight} kg</Typography></Box>
+                                <Box display="flex" justifyContent="space-between"><Typography fontWeight="800">JAMI:</Typography><Typography variant="h5" fontWeight="900" color="primary">{priceUSD}$ + {serviceFeeTL} TL</Typography></Box>
+                            </Paper>
 
-            case 4: // 10-qadam: To'lov
-                return (
-                    <Box textAlign="center">
-                        {formData.paymentMethod === 'cash' ? (
-                            <Box>
-                                <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 2 }} />
-                                <Typography variant="h5" fontWeight="700">Buyurtma qabul qilindi!</Typography>
-                                <Typography color="text.secondary" sx={{ mt: 1 }}>
-                                    Ertaga kargo xodimimiz manzilga boradi. To‘lovni naqd topshirasiz.
-                                </Typography>
-                            </Box>
-                        ) : (
-                            <Stack spacing={2}>
-                                <Typography variant="h6">Bank ma'lumotlari (IBAN)</Typography>
-                                <Paper sx={{ p: 2, bgcolor: '#fff3e0', border: '1px solid #ffe0b2' }}>
-                                    <Typography variant="body1"><b>Ism:</b> NURI KARGO</Typography>
-                                    <Typography variant="body1"><b>IBAN:</b> TR76 0001 2345 6789 0000 11</Typography>
-                                </Paper>
-                                <Typography variant="body2">To'lov cheki (Screenshot) yuklang:</Typography>
-                                <Button variant="contained" component="label" color="warning">
-                                    Chekni yuklash
-                                    <input type="file" hidden accept="image/*" />
-                                </Button>
-                                <Button variant="contained" color="success" fullWidth sx={{ mt: 2 }} onClick={() => alert("To'lov yuborildi. Tez orada tasdiqlanadi!")}>
-                                    Tasdiqlash
-                                </Button>
+                            <Stack direction="row" spacing={2}>
+                                <Button fullWidth variant="contained" color="success" onClick={() => { setFormData({ ...formData, paymentMethod: 'cash' }); nextStep(); }} sx={{ py: 2, borderRadius: '15px' }}>💵 Naqd</Button>
+                                <Button fullWidth variant="contained" color="primary" onClick={() => { setFormData({ ...formData, paymentMethod: 'card' }); nextStep(); }} sx={{ py: 2, borderRadius: '15px' }}>💳 Karta</Button>
                             </Stack>
-                        )}
-                    </Box>
+                        </Stack>
+                    </Fade>
                 );
 
-            default:
-                return null;
+            case 4: // Final
+                return (
+                    <Zoom in>
+                        <Box textAlign="center">
+                            <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
+                            <Typography variant="h4" fontWeight="900">Tayyor!</Typography>
+                            <Typography sx={{ mt: 2 }}>Kuryerimiz tez orada siz bilan bog'lanadi.</Typography>
+                            <Button fullWidth variant="outlined" sx={{ mt: 4, borderRadius: '15px' }} onClick={() => window.location.reload()}>Bosh sahifa</Button>
+                        </Box>
+                    </Zoom>
+                );
+
+            default: return null;
         }
     };
 
     return (
-        <Box sx={{ maxWidth: 500, mx: 'auto' }}>
+        <Box sx={{ maxWidth: 500, mx: 'auto', mt: 2 }}>
             <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
-                {steps.map(label => (
-                    <Step key={label}>
-                        <StepLabel>{label}</StepLabel>
-                    </Step>
-                ))}
+                {steps.map(label => (<Step key={label}><StepLabel>{label}</StepLabel></Step>))}
             </Stepper>
-            <Paper elevation={4} sx={{ p: { xs: 2, md: 4 }, borderRadius: 5 }}>
+
+            <Paper elevation={0} sx={{
+                p: { xs: 3, md: 5 }, borderRadius: '35px',
+                bgcolor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 20px 60px rgba(0,0,0,0.1)'
+            }}>
                 {renderStep()}
+
                 {activeStep > 0 && activeStep < 4 && (
-                    <Button onClick={prevStep} sx={{ mt: 2, textTransform: 'none' }} color="inherit">
+                    <Button onClick={prevStep} sx={{ mt: 3, textTransform: 'none', fontWeight: 'bold' }}>
                         ← Orqaga
                     </Button>
                 )}

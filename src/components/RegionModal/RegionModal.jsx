@@ -1,32 +1,53 @@
 import React, { useState, useEffect } from 'react';
-// Ishlatilmagan DialogTitle va IconButton olib tashlandi
 import {
-    Dialog, DialogContent,
-    Typography, Stack, Button, Box
+    Dialog, DialogContent, Typography, Stack,
+    Button, Box, Zoom
 } from '@mui/material';
-
-// Ishlatilmagan LocationOnIcon olib tashlandi
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { motion } from 'framer-motion';
 
+// Premium Ikonkalar
+import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import NaturePeopleIcon from '@mui/icons-material/NaturePeople';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
+
 const regions = [
-    { id: 'selcuklu', name: 'Selçuklu', icon: '🏢' },
-    { id: 'meram', name: 'Meram', icon: '🌳' },
-    { id: 'karatay', name: 'Karatay', icon: '🏗️' }
+    {
+        id: 'selcuklu',
+        name: 'Selçuklu',
+        icon: <BusinessCenterIcon sx={{ fontSize: 28 }} />,
+        color: '#6366f1',
+        desc: 'Markaziy biznes va zamonaviy hayot'
+    },
+    {
+        id: 'meram',
+        name: 'Meram',
+        icon: <NaturePeopleIcon sx={{ fontSize: 28 }} />,
+        color: '#10b981',
+        desc: 'Yashil hudud va sokin tabiat'
+    },
+    {
+        id: 'karatay',
+        name: 'Karatay',
+        icon: <PrecisionManufacturingIcon sx={{ fontSize: 28 }} />,
+        color: '#f59e0b',
+        desc: 'Sanoat markazi va tarixiy obidalar'
+    }
 ];
 
-const RegionModal = () => {
+const RegionModal = ({ onSelect }) => {
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
-        const savedRegion = localStorage.getItem('user_region');
-        if (!savedRegion) {
+        const sessionRegion = sessionStorage.getItem('user_region_session');
+        if (!sessionRegion) {
             setOpen(true);
         }
     }, []);
 
     const handleSelect = (regionId) => {
-        localStorage.setItem('user_region', regionId);
+        sessionStorage.setItem('user_region_session', regionId);
+        if (onSelect) onSelect(regionId);
         setOpen(false);
     };
 
@@ -35,60 +56,92 @@ const RegionModal = () => {
             open={open}
             maxWidth="xs"
             fullWidth
+            TransitionComponent={Zoom}
             PaperProps={{
-                sx: { borderRadius: 4, padding: '10px' } // MUI'da style o'rniga sx ishlatish tavsiya etiladi
+                sx: {
+                    borderRadius: '28px',
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    backdropFilter: 'blur(15px)',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                }
             }}
         >
-            <DialogContent>
-                <Stack alignItems="center" spacing={2} sx={{ py: 2 }}>
+            <DialogContent sx={{ p: 4 }}>
+                <Stack alignItems="center" spacing={3}>
+
+                    {/* Premium Animatsion Logo */}
                     <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        animate={{ y: [0, -8, 0] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                     >
                         <Box sx={{
-                            bgcolor: 'primary.light',
                             p: 2,
-                            borderRadius: '50%',
-                            color: 'primary.main',
-                            display: 'flex'
+                            borderRadius: '22px',
+                            background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                            color: 'white',
+                            display: 'flex',
+                            boxShadow: '0 15px 30px -5px rgba(99, 102, 241, 0.4)'
                         }}>
-                            <LocalShippingIcon sx={{ fontSize: 40 }} />
+                            <RocketLaunchIcon sx={{ fontSize: 40 }} />
                         </Box>
                     </motion.div>
 
-                    <Typography variant="h5" fontWeight="700" textAlign="center">
-                        Xush kelibsiz!
-                    </Typography>
+                    <Box textAlign="center">
+                        <Typography variant="h4" fontWeight="900" sx={{ color: '#1e293b', letterSpacing: '-0.5px' }}>
+                            Xush Kelibsiz!
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, px: 1 }}>
+                            Kargo xizmatidan foydalanish uchun hududingizni tanlang
+                        </Typography>
+                    </Box>
 
-                    <Typography variant="body2" color="text.secondary" textAlign="center">
-                        Logistika xizmatini to'g'ri tashkillashtirishimiz uchun hududingizni tanlang:
-                    </Typography>
-
-                    <Stack spacing={1.5} width="100%" sx={{ mt: 2 }}>
+                    <Stack spacing={2} width="100%">
                         {regions.map((region) => (
-                            <Button
+                            <motion.div
                                 key={region.id}
-                                variant="outlined"
-                                size="large"
-                                fullWidth
-                                startIcon={<span>{region.icon}</span>}
-                                onClick={() => handleSelect(region.id)}
-                                sx={{
-                                    py: 1.5,
-                                    borderRadius: '12px',
-                                    textTransform: 'none',
-                                    fontSize: '1.1rem',
-                                    borderWidth: '2px',
-                                    '&:hover': {
-                                        borderWidth: '2px',
-                                        bgcolor: 'primary.main',
-                                        color: 'white'
-                                    }
-                                }}
+                                whileHover={{ scale: 1.03, y: -2 }}
+                                whileTap={{ scale: 0.98 }}
                             >
-                                {region.name}
-                            </Button>
+                                <Button
+                                    fullWidth
+                                    onClick={() => handleSelect(region.id)}
+                                    sx={{
+                                        p: 2.5,
+                                        justifyContent: 'flex-start',
+                                        borderRadius: '20px',
+                                        background: 'rgba(255, 255, 255, 0.6)',
+                                        border: '1px solid rgba(0, 0, 0, 0.05)',
+                                        transition: 'all 0.3s ease',
+                                        textTransform: 'none',
+                                        '&:hover': {
+                                            background: 'white',
+                                            borderColor: region.color,
+                                            boxShadow: `0 12px 20px -8px ${region.color}40`
+                                        }
+                                    }}
+                                >
+                                    <Box sx={{
+                                        p: 1.2,
+                                        borderRadius: '14px',
+                                        bgcolor: `${region.color}10`,
+                                        color: region.color,
+                                        display: 'flex',
+                                        mr: 2.5,
+                                        border: `1px solid ${region.color}20`
+                                    }}>
+                                        {region.icon}
+                                    </Box>
+                                    <Box textAlign="left">
+                                        <Typography variant="subtitle1" fontWeight="800" color="#1e293b" sx={{ lineHeight: 1.1 }}>
+                                            {region.name}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                                            {region.desc}
+                                        </Typography>
+                                    </Box>
+                                </Button>
+                            </motion.div>
                         ))}
                     </Stack>
                 </Stack>
