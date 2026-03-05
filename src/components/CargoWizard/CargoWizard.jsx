@@ -14,6 +14,7 @@ import MyLocationIcon from '@mui/icons-material/MyLocation';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ScaleIcon from '@mui/icons-material/Scale';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import LocationCityIcon from '@mui/icons-material/LocationCity'; // Yangi hudud ikonkasini qo'shdik
 
 // Leaflet Marker fix
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -21,12 +22,16 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 let DefaultIcon = L.icon({ iconUrl: markerIcon, shadowUrl: markerShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const steps = ['Yuk', 'Qabul qiluvchi', 'Xavfsizlik', 'To‘lov'];
+// Qadamlar ro'yxatiga "Hudud" qo'shildi
+const steps = ['Hudud', 'Yuk', 'Qabul qiluvchi', 'Xavfsizlik', 'To‘lov'];
 
 export default function CargoWizard({ region }) {
     const [activeStep, setActiveStep] = useState(0);
     const [loadingMap, setLoadingMap] = useState(false);
+
+    // formData ichiga 'district' qo'shildi
     const [formData, setFormData] = useState({
+        district: '',
         weight: 10,
         coords: null,
         receiverFIO: '',
@@ -86,7 +91,55 @@ export default function CargoWizard({ region }) {
 
     const renderStep = () => {
         switch (activeStep) {
-            case 0: // 1-Qadam: Og'irlik va Xarita
+            case 0: // 1-Qadam: HUDUD TANLASH (Yangi qo'shilgan)
+                return (
+                    <Fade in timeout={500}>
+                        <Stack spacing={4}>
+                            <Box sx={{ textAlign: 'center' }}>
+                                <LocationCityIcon sx={{ fontSize: 60, color: 'primary.main', mb: 1 }} />
+                                <Typography variant="h5" fontWeight="900">Qaysi tumandasiz?</Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                    Logistika va tezkor xizmat uchun hududingizni tanlang.
+                                </Typography>
+                            </Box>
+
+                            <Stack spacing={2} sx={{ px: { xs: 0, sm: 2 } }}>
+                                {['Selçuklu', 'Meram', 'Karatay'].map((dist) => (
+                                    <Button
+                                        key={dist}
+                                        variant={formData.district === dist ? "contained" : "outlined"}
+                                        size="large"
+                                        onClick={() => setFormData({ ...formData, district: dist })}
+                                        sx={{
+                                            py: 2,
+                                            borderRadius: '20px',
+                                            fontWeight: '800',
+                                            fontSize: '1.1rem',
+                                            borderWidth: formData.district === dist ? 0 : 2,
+                                            boxShadow: formData.district === dist ? '0 8px 25px rgba(25, 118, 210, 0.3)' : 'none',
+                                            transition: 'all 0.3s ease',
+                                            '&:hover': {
+                                                borderWidth: formData.district === dist ? 0 : 2,
+                                                transform: 'translateY(-2px)'
+                                            }
+                                        }}
+                                    >
+                                        📍 {dist}
+                                    </Button>
+                                ))}
+                            </Stack>
+
+                            <Button
+                                fullWidth variant="contained" disabled={!formData.district}
+                                onClick={nextStep} sx={{ py: 2, borderRadius: '18px', fontWeight: '800', mt: 2 }}
+                            >
+                                Davom etish
+                            </Button>
+                        </Stack>
+                    </Fade>
+                );
+
+            case 1: // 2-Qadam: Og'irlik va Xarita
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={4}>
@@ -138,7 +191,7 @@ export default function CargoWizard({ region }) {
                     </Fade>
                 );
 
-            case 1: // 2-Qadam: Qabul qiluvchi (Siz so'ragan Pro telefon filtr)
+            case 2: // 3-Qadam: Qabul qiluvchi
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={3}>
@@ -180,7 +233,7 @@ export default function CargoWizard({ region }) {
                     </Fade>
                 );
 
-            case 2: // 3-Qadam: Xavfsizlik
+            case 3: // 4-Qadam: Xavfsizlik
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={3}>
@@ -216,7 +269,7 @@ export default function CargoWizard({ region }) {
                     </Fade>
                 );
 
-            case 3: // 4-Qadam: Invoys
+            case 4: // 5-Qadam: Invoys
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={3}>
@@ -226,8 +279,9 @@ export default function CargoWizard({ region }) {
                                     <Typography variant="h6" fontWeight="900">NURI CARGO INVOICE</Typography>
                                 </Stack>
                                 <Divider sx={{ my: 1.5 }} />
-                                <Box display="flex" justifyContent="space-between"><Typography>Vazn:</Typography><Typography fontWeight="700">{formData.weight} kg</Typography></Box>
-                                <Box display="flex" justifyContent="space-between"><Typography fontWeight="800">JAMI:</Typography><Typography variant="h5" fontWeight="900" color="primary">{priceUSD}$ + {serviceFeeTL} TL</Typography></Box>
+                                <Box display="flex" justifyContent="space-between"><Typography>Hudud:</Typography><Typography fontWeight="700">{formData.district}</Typography></Box>
+                                <Box display="flex" justifyContent="space-between" sx={{ mt: 1 }}><Typography>Vazn:</Typography><Typography fontWeight="700">{formData.weight} kg</Typography></Box>
+                                <Box display="flex" justifyContent="space-between" sx={{ mt: 1 }}><Typography fontWeight="800">JAMI:</Typography><Typography variant="h5" fontWeight="900" color="primary">{priceUSD}$ + {serviceFeeTL} TL</Typography></Box>
                             </Paper>
 
                             <Stack direction="row" spacing={2}>
@@ -238,7 +292,7 @@ export default function CargoWizard({ region }) {
                     </Fade>
                 );
 
-            case 4: // Final
+            case 5: // Final
                 return (
                     <Zoom in>
                         <Box textAlign="center">
@@ -257,7 +311,11 @@ export default function CargoWizard({ region }) {
     return (
         <Box sx={{ maxWidth: 500, mx: 'auto', mt: 2 }}>
             <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
-                {steps.map(label => (<Step key={label}><StepLabel>{label}</StepLabel></Step>))}
+                {steps.map((label, index) => (
+                    <Step key={label} completed={activeStep > index}>
+                        <StepLabel>{label}</StepLabel>
+                    </Step>
+                ))}
             </Stepper>
 
             <Paper elevation={0} sx={{
@@ -267,7 +325,8 @@ export default function CargoWizard({ region }) {
             }}>
                 {renderStep()}
 
-                {activeStep > 0 && activeStep < 4 && (
+                {/* Orqaga tugmasi moslashtirildi */}
+                {activeStep > 0 && activeStep < 5 && (
                     <Button onClick={prevStep} sx={{ mt: 3, textTransform: 'none', fontWeight: 'bold' }}>
                         ← Orqaga
                     </Button>
