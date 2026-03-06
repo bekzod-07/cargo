@@ -70,14 +70,6 @@ export default function CargoWizard() {
         return result;
     };
 
-    // Xarita komponenti
-    function MapPicker() {
-        useMapEvents({
-            click(e) { setFormData({ ...formData, coords: [e.latlng.lat, e.latlng.lng] }); },
-        });
-        return formData.coords ? <Marker position={formData.coords} /> : null;
-    }
-
 // 1. Xarita boshqaruvi uchun yordamchi komponent
     function MapController({ coords }) {
         const map = useMapEvents({
