@@ -14,7 +14,8 @@ import MyLocationIcon from '@mui/icons-material/MyLocation';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ScaleIcon from '@mui/icons-material/Scale';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import LocationCityIcon from '@mui/icons-material/LocationCity'; // Yangi hudud ikonkasini qo'shdik
+import LocationCityIcon from '@mui/icons-material/LocationCity';
+import SendIcon from '@mui/icons-material/Send';
 
 // Leaflet Marker fix
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -22,14 +23,13 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 let DefaultIcon = L.icon({ iconUrl: markerIcon, shadowUrl: markerShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Qadamlar ro'yxatiga "Hudud" qo'shildi
 const steps = ['Hudud', 'Yuk', 'Qabul qiluvchi', 'Xavfsizlik', 'To‘lov'];
 
-export default function CargoWizard({ region }) {
+export default function CargoWizard() {
     const [activeStep, setActiveStep] = useState(0);
     const [loadingMap, setLoadingMap] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // formData ichiga 'district' qo'shildi
     const [formData, setFormData] = useState({
         district: '',
         weight: 10,
@@ -49,17 +49,17 @@ export default function CargoWizard({ region }) {
     const priceUSD = formData.weight * 8;
     const serviceFeeTL = 400;
 
-    // Telefon raqamni formatlash (Pro Filter)
+    // Telefon raqamni formatlash
     const formatPhoneNumber = (value) => {
         if (!value) return '+998 ';
         const phoneNumber = value.replace(/[^\d]/g, '');
         if (!phoneNumber.startsWith('998')) return '+998 ';
 
-        const part1 = phoneNumber.slice(0, 3); // 998
-        const part2 = phoneNumber.slice(3, 5); // 90
-        const part3 = phoneNumber.slice(5, 8); // 123
-        const part4 = phoneNumber.slice(8, 10); // 45
-        const part5 = phoneNumber.slice(10, 12); // 67
+        const part1 = phoneNumber.slice(0, 3);
+        const part2 = phoneNumber.slice(3, 5);
+        const part3 = phoneNumber.slice(5, 8);
+        const part4 = phoneNumber.slice(8, 10);
+        const part5 = phoneNumber.slice(10, 12);
 
         let result = `+${part1} `;
         if (part2) result += `(${part2}) `;
@@ -78,20 +78,126 @@ export default function CargoWizard({ region }) {
         return formData.coords ? <Marker position={formData.coords} /> : null;
     }
 
+// 1. Xarita boshqaruvi uchun yordamchi komponent
+    function MapController({ coords }) {
+        const map = useMapEvents({
+            click(e) {
+                setFormData(prev => ({ ...prev, coords: [e.latlng.lat, e.latlng.lng] }));
+            },
+        });
+
+        // Agar koordinata o'zgarsa, xarita o'sha yerga silliq siljiydi
+        React.useEffect(() => {
+            if (coords) {
+                map.flyTo(coords, 16, { animate: true, duration: 1.5 });
+            }
+        }, [coords, map]);
+
+        return formData.coords ? <Marker position={formData.coords} /> : null;
+    }
+
+// 2. GPS aniqlash funksiyasi (animatsiya bilan)
     const getGPS = () => {
         setLoadingMap(true);
+        if (!navigator.geolocation) {
+            alert("Brauzeringiz lokatsiyani qo'llab-quvvatlamaydi");
+            setLoadingMap(false);
+            return;
+        }
+
         navigator.geolocation.getCurrentPosition(
             (p) => {
-                setFormData({ ...formData, coords: [p.coords.latitude, p.coords.longitude] });
+                const newCoords = [p.coords.latitude, p.coords.longitude];
+                setFormData(prev => ({ ...prev, coords: newCoords }));
                 setLoadingMap(false);
             },
-            () => { setLoadingMap(false); alert("GPS aniqlanmadi, xaritadan tanlang."); }
+            (error) => {
+                setLoadingMap(false);
+                alert("Lokatsiyani aniqlashga ruxsat berilmadi yoki xatolik yuz berdi.");
+            },
+            { enableHighAccuracy: true }
         );
+    };
+
+    // Telegramga ma'lumot yuborish funksiyasi
+    const sendToTelegram = async (paymentMethod) => {
+        setIsSubmitting(true);
+        const BOT_TOKEN = '8798697794:AAH8whHzw0sTsWEUrTZAR1Nz-aU18enBADI';
+        const CHAT_ID = '-1003869653928';
+
+        const mapLink = formData.coords
+            ? `<a href="https://www.google.com/maps?q=${formData.coords[0]},${formData.coords[1]}">📍 Xaritada ko'rish</a>`
+            : "Joylashuv kiritilmadi";
+
+        const textMessage = `
+📦 <b>YANGI BUYURTMA | NURI CARGO</b>
+━━━━━━━━━━━━━━━━━━━━━━
+📍 <b>Hudud:</b> ${formData.district}
+⚖️ <b>Yuk vazni:</b> ${formData.weight} kg
+🗺 <b>Lokatsiya:</b> ${mapLink}
+
+👤 <b>QABUL QILUVCHI</b>
+▪️ <b>F.I.O:</b> ${formData.receiverFIO}
+▪️ <b>Telefon:</b> ${formData.receiverPhone}
+
+🛡 <b>XAVFSIZLIK VA BOG'LANISH</b>
+▪️ <b>Mijoz aloqa:</b> ${formData.contact}
+▪️ <b>Holati:</b> Tekshirilgan va tasdiqlangan ✅
+
+💳 <b>TO'LOV MA'LUMOTI</b>
+▪️ <b>Usul:</b> ${paymentMethod === 'cash' ? '💵 Naqd' : '💳 Karta'}
+▪️ <b>Jami summa:</b> ${priceUSD}$ + ${serviceFeeTL} TL
+━━━━━━━━━━━━━━━━━━━━━━`;
+
+        try {
+            // 1. Matnli xabarni yuborish
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: textMessage,
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: false
+                })
+            });
+
+            // 2. Pasport rasmini yuborish
+            if (formData.passportImg) {
+                const passportData = new FormData();
+                passportData.append('chat_id', CHAT_ID);
+                passportData.append('photo', formData.passportImg);
+                passportData.append('caption', `👤 Qabul qiluvchi pasporti: ${formData.receiverFIO}`);
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: passportData });
+            }
+
+            // 3. Yuk rasmini yuborish
+            if (formData.itemsImg) {
+                const itemsData = new FormData();
+                itemsData.append('chat_id', CHAT_ID);
+                itemsData.append('photo', formData.itemsImg);
+                itemsData.append('caption', `📦 Yuklar ro'yxati`);
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: itemsData });
+            }
+
+            // Hammasi muvaffaqiyatli yakunlangach final qadamga o'tish
+            nextStep();
+        } catch (error) {
+            console.error("Telegramga yuborishda xatolik yuz berdi:", error);
+            alert("Ma'lumot yuborishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleComplete = async (method) => {
+        setFormData({ ...formData, paymentMethod: method });
+        await sendToTelegram(method);
     };
 
     const renderStep = () => {
         switch (activeStep) {
-            case 0: // 1-Qadam: HUDUD TANLASH (Yangi qo'shilgan)
+            case 0:
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={4}>
@@ -102,50 +208,34 @@ export default function CargoWizard({ region }) {
                                     Logistika va tezkor xizmat uchun hududingizni tanlang.
                                 </Typography>
                             </Box>
-
                             <Stack spacing={2} sx={{ px: { xs: 0, sm: 2 } }}>
                                 {['Selçuklu', 'Meram', 'Karatay'].map((dist) => (
                                     <Button
-                                        key={dist}
-                                        variant={formData.district === dist ? "contained" : "outlined"}
-                                        size="large"
+                                        key={dist} variant={formData.district === dist ? "contained" : "outlined"} size="large"
                                         onClick={() => setFormData({ ...formData, district: dist })}
                                         sx={{
-                                            py: 2,
-                                            borderRadius: '20px',
-                                            fontWeight: '800',
-                                            fontSize: '1.1rem',
+                                            py: 2, borderRadius: '20px', fontWeight: '800', fontSize: '1.1rem',
                                             borderWidth: formData.district === dist ? 0 : 2,
                                             boxShadow: formData.district === dist ? '0 8px 25px rgba(25, 118, 210, 0.3)' : 'none',
                                             transition: 'all 0.3s ease',
-                                            '&:hover': {
-                                                borderWidth: formData.district === dist ? 0 : 2,
-                                                transform: 'translateY(-2px)'
-                                            }
+                                            '&:hover': { borderWidth: formData.district === dist ? 0 : 2, transform: 'translateY(-2px)' }
                                         }}
-                                    >
-                                        📍 {dist}
-                                    </Button>
+                                    >📍 {dist}</Button>
                                 ))}
                             </Stack>
-
-                            <Button
-                                fullWidth variant="contained" disabled={!formData.district}
-                                onClick={nextStep} sx={{ py: 2, borderRadius: '18px', fontWeight: '800', mt: 2 }}
-                            >
-                                Davom etish
-                            </Button>
+                            <Button fullWidth variant="contained" disabled={!formData.district} onClick={nextStep} sx={{ py: 2, borderRadius: '18px', fontWeight: '800', mt: 2 }}>Davom etish</Button>
                         </Stack>
                     </Fade>
                 );
 
-            case 1: // 2-Qadam: Og'irlik va Xarita
+            case 1: // Yuk va Lokatsiya
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={4}>
+                            {/* Og'irlik qismi (o'zgarishsiz qolishi mumkin) */}
                             <Box sx={{ textAlign: 'center' }}>
                                 <ScaleIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                                <Typography variant="h5" fontWeight="800">Yuk og'irligi</Typography>
+                                <Typography variant="h5" fontWeight="800">Yuk va Manzil</Typography>
                             </Box>
 
                             <Box sx={{ px: 2 }}>
@@ -155,35 +245,47 @@ export default function CargoWizard({ region }) {
                                     onChange={(e, val) => setFormData({ ...formData, weight: val })}
                                     sx={{ mb: 2 }}
                                 />
-                                <TextField
-                                    fullWidth label="Aniq vazn" type="number"
-                                    value={formData.weight}
-                                    onChange={(e) => setFormData({ ...formData, weight: Math.max(0, parseInt(e.target.value) || 0) })}
-                                    InputProps={{ endAdornment: <InputAdornment position="end">kg</InputAdornment> }}
-                                    error={formData.weight < 10}
-                                    helperText={formData.weight < 10 && "Minimal 10 kg bo'lishi shart"}
-                                />
                             </Box>
 
-                            <Divider>LOKATSIYA (MAJBURIY)</Divider>
+                            <Divider sx={{ fontWeight: 'bold', color: 'primary.main' }}>LOKATSIYANI BELGILANG</Divider>
 
-                            <Box sx={{ height: 250, borderRadius: '20px', overflow: 'hidden', border: '1px solid #eee' }}>
-                                <MapContainer center={[37.8713, 32.4846]} zoom={13} style={{ height: '100%' }}>
+                            {/* XARITA BLOKI */}
+                            <Box sx={{ position: 'relative', height: 300, borderRadius: '25px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', border: '2px solid #fff' }}>
+                                <MapContainer center={[37.8713, 32.4846]} zoom={13} style={{ height: '100%', width: '100%' }}>
                                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                                    <MapPicker />
+                                    <MapController coords={formData.coords} />
                                 </MapContainer>
+
+                                {/* Xarita ustidagi yordamchi yozuv */}
+                                {!formData.coords && (
+                                    <Box sx={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, bgcolor: 'rgba(255,255,255,0.9)', px: 2, py: 0.5, borderRadius: '10px', pointerEvents: 'none' }}>
+                                        <Typography variant="caption" fontWeight="bold">Xaritadan tanlang yoki GPS bosing</Typography>
+                                    </Box>
+                                )}
                             </Box>
 
                             <Button
-                                fullWidth variant="outlined" startIcon={loadingMap ? <CircularProgress size={20} /> : <MyLocationIcon />}
-                                onClick={getGPS} sx={{ borderRadius: '15px', py: 1.5 }}
+                                fullWidth
+                                variant="contained"
+                                color="secondary"
+                                startIcon={loadingMap ? <CircularProgress size={20} color="inherit" /> : <MyLocationIcon />}
+                                onClick={getGPS}
+                                sx={{
+                                    borderRadius: '15px',
+                                    py: 1.8,
+                                    background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+                                    boxShadow: '0 3px 15px rgba(33, 203, 243, .3)'
+                                }}
                             >
-                                {formData.coords ? "📍 Nuqta belgilandi" : "Hozirgi joyimni aniqlash"}
+                                {formData.coords ? "Joylashuv yangilandi ✅" : "Hozirgi joyimni aniqlash"}
                             </Button>
 
                             <Button
-                                fullWidth variant="contained" disabled={formData.weight < 10 || !formData.coords}
-                                onClick={nextStep} sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
+                                fullWidth
+                                variant="contained"
+                                disabled={formData.weight < 10 || !formData.coords}
+                                onClick={nextStep}
+                                sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
                             >
                                 Davom etish
                             </Button>
@@ -191,29 +293,17 @@ export default function CargoWizard({ region }) {
                     </Fade>
                 );
 
-            case 2: // 3-Qadam: Qabul qiluvchi
+            case 2:
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={3}>
                             <Typography variant="h6" fontWeight="800" textAlign="center">Qabul qiluvchi ma'lumotlari</Typography>
-
-                            <TextField
-                                fullWidth label="F.I.O (To'liq)"
-                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
-                                onChange={(e) => setFormData({ ...formData, receiverFIO: e.target.value })}
+                            <TextField fullWidth label="F.I.O (To'liq)" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }} onChange={(e) => setFormData({ ...formData, receiverFIO: e.target.value })} />
+                            <TextField fullWidth label="O'zbekiston telefon raqami" value={formData.receiverPhone} placeholder="+998 (90) 123-45-67"
+                                       InputProps={{ startAdornment: <InputAdornment position="start">🇺🇿</InputAdornment> }}
+                                       sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
+                                       onChange={(e) => setFormData({ ...formData, receiverPhone: formatPhoneNumber(e.target.value) })}
                             />
-
-                            <TextField
-                                fullWidth label="O'zbekiston telefon raqami"
-                                value={formData.receiverPhone}
-                                placeholder="+998 (90) 123-45-67"
-                                InputProps={{
-                                    startAdornment: <InputAdornment position="start">🇺🇿</InputAdornment>,
-                                }}
-                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
-                                onChange={(e) => setFormData({ ...formData, receiverPhone: formatPhoneNumber(e.target.value) })}
-                            />
-
                             <Paper variant="outlined" sx={{ p: 3, borderStyle: 'dashed', borderRadius: '15px', textAlign: 'center', bgcolor: '#fafafa' }}>
                                 <Button component="label" startIcon={<CloudUploadIcon />} sx={{ textTransform: 'none', fontWeight: 'bold' }}>
                                     {formData.passportImg ? "✅ Pasport yuklandi" : "Pasport rasmini yuklash"}
@@ -221,55 +311,31 @@ export default function CargoWizard({ region }) {
                                 </Button>
                                 {formData.passportImg && <Typography variant="caption" display="block">{formData.passportImg.name}</Typography>}
                             </Paper>
-
-                            <Button
-                                fullWidth variant="contained" onClick={nextStep}
-                                disabled={!formData.receiverFIO || formData.receiverPhone.length < 19 || !formData.passportImg}
-                                sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
-                            >
-                                Davom etish
-                            </Button>
+                            <Button fullWidth variant="contained" onClick={nextStep} disabled={!formData.receiverFIO || formData.receiverPhone.length < 19 || !formData.passportImg} sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}>Davom etish</Button>
                         </Stack>
                     </Fade>
                 );
 
-            case 3: // 4-Qadam: Xavfsizlik
+            case 3:
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={3}>
                             <Typography variant="h6" fontWeight="800" textAlign="center">Xavfsizlik tekshiruvi</Typography>
-                            <Alert severity="warning" sx={{ borderRadius: '15px' }}>
-                                Suyuqlik, kukun va batareyalar taqiqlanadi!
-                            </Alert>
-                            <Button
-                                variant={formData.isSafe ? "contained" : "outlined"}
-                                color="success" fullWidth onClick={() => setFormData({ ...formData, isSafe: true })}
-                                sx={{ borderRadius: '15px', py: 1.5 }}
-                            > Tasdiqlayman </Button>
-
+                            <Alert severity="warning" sx={{ borderRadius: '15px' }}>Suyuqlik, kukun va batareyalar taqiqlanadi!</Alert>
+                            <Button variant={formData.isSafe ? "contained" : "outlined"} color="success" fullWidth onClick={() => setFormData({ ...formData, isSafe: true })} sx={{ borderRadius: '15px', py: 1.5 }}>Tasdiqlayman</Button>
                             <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed', borderRadius: '15px', textAlign: 'center' }}>
                                 <Button component="label" startIcon={<CloudUploadIcon />}>
                                     {formData.itemsImg ? "✅ Ro'yxat yuklandi" : "Yuklar ro'yxati (Rasm)"}
                                     <input type="file" hidden accept="image/*" onChange={(e) => setFormData({ ...formData, itemsImg: e.target.files[0] })} />
                                 </Button>
                             </Paper>
-
-                            <TextField
-                                fullWidth label="Telegram yoki Tel" placeholder="@username"
-                                onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }}
-                            />
-
-                            <Button
-                                fullWidth variant="contained" onClick={nextStep}
-                                disabled={!formData.isSafe || !formData.itemsImg || !formData.contact}
-                                sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}
-                            > Hisob-faktura </Button>
+                            <TextField fullWidth label="Telegram yoki Tel" placeholder="@username" onChange={(e) => setFormData({ ...formData, contact: e.target.value })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '15px' } }} />
+                            <Button fullWidth variant="contained" onClick={nextStep} disabled={!formData.isSafe || !formData.itemsImg || !formData.contact} sx={{ py: 2, borderRadius: '18px', fontWeight: '800' }}>Hisob-faktura</Button>
                         </Stack>
                     </Fade>
                 );
 
-            case 4: // 5-Qadam: Invoys
+            case 4:
                 return (
                     <Fade in timeout={500}>
                         <Stack spacing={3}>
@@ -285,21 +351,27 @@ export default function CargoWizard({ region }) {
                             </Paper>
 
                             <Stack direction="row" spacing={2}>
-                                <Button fullWidth variant="contained" color="success" onClick={() => { setFormData({ ...formData, paymentMethod: 'cash' }); nextStep(); }} sx={{ py: 2, borderRadius: '15px' }}>💵 Naqd</Button>
-                                <Button fullWidth variant="contained" color="primary" onClick={() => { setFormData({ ...formData, paymentMethod: 'card' }); nextStep(); }} sx={{ py: 2, borderRadius: '15px' }}>💳 Karta</Button>
+                                <Button fullWidth variant="contained" color="success" disabled={isSubmitting} onClick={() => handleComplete('cash')} sx={{ py: 2, borderRadius: '15px', fontWeight: 'bold' }}>
+                                    {isSubmitting ? <CircularProgress size={24} color="inherit" /> : "💵 Naqd"}
+                                </Button>
+                                <Button fullWidth variant="contained" color="primary" disabled={isSubmitting} onClick={() => handleComplete('card')} sx={{ py: 2, borderRadius: '15px', fontWeight: 'bold' }}>
+                                    {isSubmitting ? <CircularProgress size={24} color="inherit" /> : "💳 Karta"}
+                                </Button>
                             </Stack>
                         </Stack>
                     </Fade>
                 );
 
-            case 5: // Final
+            case 5:
                 return (
                     <Zoom in>
                         <Box textAlign="center">
                             <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
                             <Typography variant="h4" fontWeight="900">Tayyor!</Typography>
-                            <Typography sx={{ mt: 2 }}>Kuryerimiz tez orada siz bilan bog'lanadi.</Typography>
-                            <Button fullWidth variant="outlined" sx={{ mt: 4, borderRadius: '15px' }} onClick={() => window.location.reload()}>Bosh sahifa</Button>
+                            <Typography sx={{ mt: 2, mb: 4 }}>Ma'lumotlaringiz muvaffaqiyatli yuborildi. Kuryerimiz tez orada siz bilan bog'lanadi.</Typography>
+                            <Button fullWidth variant="outlined" endIcon={<SendIcon />} sx={{ py: 1.5, borderRadius: '15px', fontWeight: 'bold' }} onClick={() => window.location.reload()}>
+                                Yangi buyurtma
+                            </Button>
                         </Box>
                     </Zoom>
                 );
@@ -309,7 +381,7 @@ export default function CargoWizard({ region }) {
     };
 
     return (
-        <Box sx={{ maxWidth: 500, mx: 'auto', mt: 2 }}>
+        <Box sx={{ maxWidth: 500, mx: 'auto', mt: 2, mb: 5 }}>
             <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
                 {steps.map((label, index) => (
                     <Step key={label} completed={activeStep > index}>
@@ -325,9 +397,8 @@ export default function CargoWizard({ region }) {
             }}>
                 {renderStep()}
 
-                {/* Orqaga tugmasi moslashtirildi */}
-                {activeStep > 0 && activeStep < 5 && (
-                    <Button onClick={prevStep} sx={{ mt: 3, textTransform: 'none', fontWeight: 'bold' }}>
+                {activeStep > 0 && activeStep < 4 && !isSubmitting && (
+                    <Button onClick={prevStep} sx={{ mt: 3, textTransform: 'none', fontWeight: 'bold', color: 'text.secondary' }}>
                         ← Orqaga
                     </Button>
                 )}
