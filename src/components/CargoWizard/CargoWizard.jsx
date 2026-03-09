@@ -88,6 +88,9 @@ export default function CargoWizard() {
         return formData.coords ? <Marker position={formData.coords} /> : null;
     }
 
+
+
+
 // 2. GPS aniqlash funksiyasi (animatsiya bilan)
     const getGPS = () => {
         setLoadingMap(true);
@@ -111,14 +114,46 @@ export default function CargoWizard() {
         );
     };
 
-    // Telegramga ma'lumot yuborish funksiyasi
+const sendToGoogleSheets = async (paymentMethod) => {
+        // DIQQAT: Bu yerga jadval linki emas, Apps Script'dan olingan Web App URL qo'yiladi!
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxoYKVg7PPw_mxvc0K3KD-DXD2oMiF2F47c5Ctr4k_dpBw1mBRwe_4bEXDDBMypwlhkEQ/exec';
+
+        const sheetData = {
+            district: formData.district,
+            weight: formData.weight,
+            coords: formData.coords ? formData.coords.join(', ') : "Belgilanmagan",
+            receiverFIO: formData.receiverFIO,
+            receiverPhone: formData.receiverPhone,
+            contact: formData.contact,
+            paymentMethod: paymentMethod === 'cash' ? 'Naqd' : 'Karta',
+            totalPrice: `${formData.weight * 8}$ + 400 TL`
+        };
+
+        try {
+            // mode: 'no-cors' ishlatilganda fetch javob qaytarmaydi, lekin ma'lumot yetib boradi
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sheetData)
+            });
+            console.log("Google Sheets-ga yuborildi");
+        } catch (error) {
+            console.error("Sheets xatolik:", error);
+        }
+    };
+
     const sendToTelegram = async (paymentMethod) => {
         setIsSubmitting(true);
+        
+        // Google Sheets-ga yuborishni chaqiramiz
+        await sendToGoogleSheets(paymentMethod);
+
         const BOT_TOKEN = '8798697794:AAH8whHzw0sTsWEUrTZAR1Nz-aU18enBADI';
         const CHAT_ID = '-1003869653928';
 
         const mapLink = formData.coords
-            ? `<a href="https://www.google.com/maps?q=${formData.coords[0]},${formData.coords[1]}">📍 Xaritada ko'rish</a>`
+            ? `https://www.google.com/maps?q=${formData.coords[0]},${formData.coords[1]}`
             : "Joylashuv kiritilmadi";
 
         const textMessage = `
@@ -126,7 +161,7 @@ export default function CargoWizard() {
 ━━━━━━━━━━━━━━━━━━━━━━
 📍 <b>Hudud:</b> ${formData.district}
 ⚖️ <b>Yuk vazni:</b> ${formData.weight} kg
-🗺 <b>Lokatsiya:</b> ${mapLink}
+🗺 <b>Lokatsiya:</b> <a href="${mapLink}">📍 Xaritada ko'rish</a>
 
 👤 <b>QABUL QILUVCHI</b>
 ▪️ <b>F.I.O:</b> ${formData.receiverFIO}
@@ -138,11 +173,11 @@ export default function CargoWizard() {
 
 💳 <b>TO'LOV MA'LUMOTI</b>
 ▪️ <b>Usul:</b> ${paymentMethod === 'cash' ? '💵 Naqd' : '💳 Karta'}
-▪️ <b>Jami summa:</b> ${priceUSD}$ + ${serviceFeeTL} TL
+▪️ <b>Jami summa:</b> ${formData.weight * 8}$ + 400 TL
 ━━━━━━━━━━━━━━━━━━━━━━`;
 
         try {
-            // 1. Matnli xabarni yuborish
+            // Telegram matnini yuborish
             await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -150,33 +185,30 @@ export default function CargoWizard() {
                     chat_id: CHAT_ID,
                     text: textMessage,
                     parse_mode: 'HTML',
-                    disable_web_page_preview: false
                 })
             });
 
-            // 2. Pasport rasmini yuborish
+            // Rasmlarni yuborish (Pasport)
             if (formData.passportImg) {
-                const passportData = new FormData();
-                passportData.append('chat_id', CHAT_ID);
-                passportData.append('photo', formData.passportImg);
-                passportData.append('caption', `👤 Qabul qiluvchi pasporti: ${formData.receiverFIO}`);
-                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: passportData });
+                const pData = new FormData();
+                pData.append('chat_id', CHAT_ID);
+                pData.append('photo', formData.passportImg);
+                pData.append('caption', `👤 Pasport: ${formData.receiverFIO}`);
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: pData });
             }
 
-            // 3. Yuk rasmini yuborish
+            // Rasmlarni yuborish (Yuklar)
             if (formData.itemsImg) {
-                const itemsData = new FormData();
-                itemsData.append('chat_id', CHAT_ID);
-                itemsData.append('photo', formData.itemsImg);
-                itemsData.append('caption', `📦 Yuklar ro'yxati`);
-                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: itemsData });
+                const iData = new FormData();
+                iData.append('chat_id', CHAT_ID);
+                iData.append('photo', formData.itemsImg);
+                iData.append('caption', `📦 Yuklar ro'yxati`);
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: iData });
             }
 
-            // Hammasi muvaffaqiyatli yakunlangach final qadamga o'tish
             nextStep();
         } catch (error) {
-            console.error("Telegramga yuborishda xatolik yuz berdi:", error);
-            alert("Ma'lumot yuborishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+            alert("Xatolik yuz berdi!");
         } finally {
             setIsSubmitting(false);
         }
